@@ -24,6 +24,8 @@ import types
 
 import types_pb2
 
+import pickle
+
 from refinement import refine_matches_coarse_to_fine
 
 
@@ -551,28 +553,34 @@ def localize(
         dummy_database_path, image_path, reference_model_path, match_list_path
 ):
     # Define local paths.
+    suffix = 'ref' if refine else 'raw'
     partial_paths = types.SimpleNamespace()
     partial_paths.log_file = os.path.join(
         'output',
-        '%s-%s-%s.loc-log.txt' % (method_name, dataset_name, 'ref' if refine else 'raw')
+        '%s-%s-%s.loc-log.txt' % (method_name, dataset_name, suffix)
     )
+
+    partial_root = os.path.join(
+        dataset_path, 'loc', f'partial-{image_id}-{suffix}')
+    os.makedirs(partial_root, exist_ok=True)
+
     partial_paths.database_path = os.path.join(
-        dataset_path, method_name + '-partial.db'
+        partial_root, method_name + '-partial.db'
     )
     partial_paths.model_path = os.path.join(
-        dataset_path, 'sparse-%s-partial' % method_name
+        partial_root, 'sparse-%s-partial' % method_name
     )
     partial_paths.empty_model_path = os.path.join(
-        dataset_path, 'sparse-%s-partial-empty' % method_name
+        partial_root, 'sparse-%s-partial-empty' % method_name
     )
     if refine:
         partial_paths.solution_file = os.path.join(
-            dataset_path, '%s-partial-solution.pb' % method_name
+            partial_root, '%s-partial-solution.pb' % method_name
         )
     else:
         partial_paths.solution_file = None
     partial_paths.match_list_file = os.path.join(
-        dataset_path, 'match_list_partial_%s.txt' % method_name
+        partial_root, 'match_list_partial_%s.txt' % method_name
     )
 
     # Start logging.
@@ -619,7 +627,7 @@ def localize(
 
     # Create a new database.
     shutil.copyfile(dummy_database_path, partial_paths.database_path)
-    
+
     # Prepare GV list.
     with open(match_list_path, 'r') as f:
         lines = f.readlines()
@@ -629,7 +637,7 @@ def localize(
             if line_aux[0] in holdout_image_names or line_aux[1] in holdout_image_names:
                 continue
             f.write(line)
-    
+
     # Import features to a new database.
     import_features(
         colmap_path, method_name, partial_paths.database_path, image_path,
@@ -663,7 +671,7 @@ def localize(
                 continue
             image2 = numpy_images[image_name2]
             fact2 = facts[image_name2]
-            
+
             scores = all_matching_scores[image_name2]
             p2D_idx_reprojected = points2D_idx_reprojected[image_name2]
             p2D_idx_to_p3D_id = points2D_idx_to_points3D_id[image_name2]
@@ -710,6 +718,7 @@ def localize(
         # PnP.
         pnp_points2D = []
         pnp_points3D = []
+        pnp_points3D_id = []
         for p2D_idx, tracks in enumerate(matched_tracks):
             for p3D_id in tracks:
                 p3D = points3D[p3D_id]
@@ -720,23 +729,20 @@ def localize(
 
                 pnp_points3D.append(p3D)
                 pnp_points2D.append(p2D)
+                pnp_points3D_id.append(p3D_id)
 
         pose_dict = pycolmap.absolute_pose_estimation(pnp_points2D, pnp_points3D, camera_dict, 12)
 
         if pose_dict['success']:
+            # Dump pose, inlier mask, IDs of 3D points
+            dump_path = os.path.join(
+                    partial_root, f'pnp-dict-{method_name}-{suffix}.pkl')
+            with open(dump_path, 'wb') as f:
+                pickle.dump({**pose_dict, 'points3D_id': pnp_points3D_id}, f)
             pose = colmap_pose_to_matrix(pose_dict['qvec'], pose_dict['tvec'])
         else:
             pose = None
     else:
         pose = None
-
-    # Remove auxiliary files.
-    os.remove(partial_paths.database_path)
-    if refine:
-        os.remove(partial_paths.solution_file)
-    os.remove(partial_paths.match_list_file)
-
-    shutil.rmtree(partial_paths.empty_model_path)
-    shutil.rmtree(partial_paths.model_path)
 
     return pose

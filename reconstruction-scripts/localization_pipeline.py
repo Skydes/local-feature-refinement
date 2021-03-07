@@ -126,6 +126,12 @@ if __name__ == "__main__":
     all_images = list(images.items())
     selected_images = [all_images[idx] for idx in np.random.choice(len(images), 10, replace=False)]
 
+    # Dump the list of query names and IDs to be safe
+    loc_dir = os.path.join(args.dataset_path, 'loc')
+    os.makedirs(loc_dir, exist_ok=True)
+    with open(os.path.join(loc_dir, 'selected_images.txt'), 'w') as f:
+        f.write('\n'.join(' '.join((i[0], str(i[1]))) for i in selected_images))
+
     # Evaluation loop.
     for image_name, image_id in tqdm(selected_images):
         # Recover annotations.

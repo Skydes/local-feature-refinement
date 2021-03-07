@@ -81,19 +81,20 @@ if __name__ == '__main__':
     paths.ref_results_file = os.path.join('output', '%s-%s-ref.loc.txt' % (args.method_name, args.dataset_name))
     paths.raw_results_file = os.path.join('output', '%s-%s-raw.loc.txt' % (args.method_name, args.dataset_name))
 
-    # Compute the tentative matches graph and the two-view patch geometry estimates.
-    subprocess.call([
-        'python', 'two-view-refinement/compute_match_graph.py',
-        '--method_name', args.method_name,
-        '--max_edge', str(max_size_dict[args.method_name][0]),
-        '--max_sum_edges', str(max_size_dict[args.method_name][1]),
-        '--image_path', paths.image_path,
-        '--match_list_file', paths.match_list_file,
-        '--matcher', matcher_dict[args.method_name][0],
-        '--threshold', str(matcher_dict[args.method_name][1]),
-        '--output_file', paths.matches_file
-    ])
-    
+    if not os.path.exists(paths.matches_file):
+        # Compute the tentative matches graph and the two-view patch geometry estimates.
+        subprocess.call([
+            'python', 'two-view-refinement/compute_match_graph.py',
+            '--method_name', args.method_name,
+            '--max_edge', str(max_size_dict[args.method_name][0]),
+            '--max_sum_edges', str(max_size_dict[args.method_name][1]),
+            '--image_path', paths.image_path,
+            '--match_list_file', paths.match_list_file,
+            '--matcher', matcher_dict[args.method_name][0],
+            '--threshold', str(matcher_dict[args.method_name][1]),
+            '--output_file', paths.matches_file
+        ])
+
     # Run localization for refined features.
     if not skip_refinement:
         subprocess.call([
@@ -108,7 +109,7 @@ if __name__ == '__main__':
             '--max_sum_edges', str(max_size_dict[args.method_name][1]),
             '--output_path', paths.ref_results_file
         ])
-    
+
     # Run localization for raw features (without refinement).
     subprocess.call([
         'python', 'reconstruction-scripts/localization_pipeline.py',
